@@ -5,7 +5,7 @@ use vars qw($VERSION %IRSSI);
 use Irssi;
 use Socket;
 use Fcntl qw(:flock);
-use lib sprintf('%s/.irssi/scripts/lib/', $ENV{HOME} );
+use lib ( sprintf('%s/.irssi/scripts/lib/', $ENV{HOME} ) );
 
 $VERSION = '0.0.1';
 %IRSSI = (
@@ -13,7 +13,7 @@ $VERSION = '0.0.1';
 	contact     => 'rfi@remotefileinclude.net',
 	name        => 'irssi_message_client',
 	description => 'Write a notification to a message server listening on a unix socket',
-	url         => 'http://www.leemhuis.info/files/fnotify/',
+	url         => 'https://github.com/remotefileinclude',
 	license     => 'GNU General Public License',
 	changed     => '$Date: 2012-11-12 12:00:00 +0100 (Mon, 12 Nov 2012) $'
 );
@@ -39,7 +39,6 @@ sub socket_write {
     ensure_server();
     
     my $sock_addr = sockaddr_un( SQ_SOCKET );
-    
     socket( my $server, PF_UNIX,SOCK_STREAM,0 ) or die "socket: $!";
     connect( $server, $sock_addr ) or die "connect: $!";
     
