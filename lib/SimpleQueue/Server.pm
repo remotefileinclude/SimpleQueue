@@ -92,8 +92,6 @@ sub _run_main_loop {
 
     while (1) {
 
-        print "Checking for new messages\n";
-
         my ($incoming) = 
             IO::Select->select( $self->{message_select}, undef, undef, 1 );
 
@@ -106,19 +104,15 @@ sub _run_main_loop {
                  $self->{message_select}->add($active); 
             }
 	        elsif ( my $message = do { local $/ = undef ; <$socket> } ) {
-                 print "Got message: $message \n";
                  push( @messages, $message . "\n"  )	
             }
         }
-
-        print "checking for subscribers\n";
 
         my ( $outgoing_r, $outgoing_w ) = 
             IO::Select->select( $self->{client_select}, $self->{client_select}, undef, 1 );
 
         # This loop deals with commands sent from the clients
         foreach my $subscriber ( @{$outgoing_r} ) {   
-            print "Got subscriber \n" ;
             if ( $subscriber == $self->{client_socket} )  {
                   my $active = $self->{client_socket}->accept();  
                   $self->{client_select}->add($active);    
@@ -128,7 +122,6 @@ sub _run_main_loop {
                 sysread($subscriber, my $inline, 4064);
 
 	            if ( !$inline ) {
-                     print "Lost client\n";
                      $self->{client_select}->remove($subscriber);
                      delete $self->{client_tracking}->{"$subscriber"};
                 }
@@ -139,10 +132,9 @@ sub _run_main_loop {
                 elsif ( $inline eq "quit" ) {
                      $self->{client_select}->remove($subscriber); 
                      delete $self->{client_tracking}->{"$subscriber"};
-                     print "Client quit\n";
                 }
 	            else {
-                     print "unknown cmd: $inline\n"
+                     #print "unknown cmd: $inline\n"
                 }
             }
             
@@ -150,7 +142,6 @@ sub _run_main_loop {
 
         # This loop deals with sending messages to the client
         foreach my $subscriber ( @{$outgoing_w} ) {   
-             print "subscriber ready for messages\n";
              if ( @messages ) {
                  foreach my $message ( @messages ) {
                      # Message encoding  :
@@ -174,7 +165,6 @@ sub _run_main_loop {
              if ( $self->_client_timeout($subscriber ) ){
                  $self->{client_select}->remove($subscriber); 
                  delete $self->{client_tracking}->{"$subscriber"};
-                 print "Server removed a client for timeout\n";
              }  
              elsif ( ! $self->{client_tracking}->{"$subscriber"} ) {
                  $self->{client_tracking}->{"$subscriber"}->{last_ping} = time ;	

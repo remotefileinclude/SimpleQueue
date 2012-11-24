@@ -4,7 +4,9 @@ use vars qw($VERSION %IRSSI);
 
 use Irssi;
 use Socket;
-use Fcntl qw(:flock);
+use Fcntl qw(:flock O_RDONLY O_CREAT O_WRONLY );
+use POSIX qw|getpid|;
+
 use lib ( sprintf('%s/.irssi/scripts/lib/', $ENV{HOME} ) );
 
 $VERSION = '0.0.1';
@@ -20,6 +22,8 @@ $VERSION = '0.0.1';
 
 sub PIDFILE    { sprintf('%s/.irssi/scripts/sq.pid', $ENV{HOME} );  }
 sub SQ_SOCKET  { sprintf('%s/.irssi/scripts/sq.socket', $ENV{HOME} ); }
+
+ensure_server(); 
 
 sub priv_msg {
 	my ($server,$msg,$nick,$address,$target) = @_;
@@ -50,25 +54,36 @@ sub socket_write {
 sub ensure_server {
 
     if ( _can_lock_pid() ) {
+        $SIG{CHLD} = 'IGNORE';
         if ( my $pid = fork() ) {
+            END {
+                kill 15, $pid;
+            }
             return 1;
         }
         else {
-            die 'annot fork' unless defined $pid;
+            die 'Cannot fork' unless defined $pid;
+           
+            $SIG{INT} = $SIG{HUP} = sub { CORE::exit(0) };
+            close STDOUT;
+            close STDIN;
+            close STDERR;
+            
+            my $LOG_FILE = sprintf('%s/.irssi/scripts/sq.log', $ENV{HOME} ); 
 
-            use SimpleQueue::Server;
+            my $pid_f = _write_pid();
 
-            open my $pid_f, '>', PIDFILE or die "Can't open pid file: $!";    
-            flock( $pid_f, LOCK_EX | LOCK_NB ) or return 0; 
-            print $pid_f $$ ;
+            require SimpleQueue::Server;
+            SimpleQueue::Service->import();
 
             my $message_server = SimpleQueue::Server->new( 
                 socket_path => SQ_SOCKET 
             );
 
             $message_server->run(); 
-
+            
             close $pid_f;
+            CORE::exit(0)
 
         }
     }
@@ -76,10 +91,49 @@ sub ensure_server {
 }
 
 sub _can_lock_pid {
-    open  my $pid_f, '<', PIDFILE or die "Can't open pid file: $!";    
+    sysopen( my $pid_f, PIDFILE, O_RDONLY | O_CREAT ) or return 0;
     flock( $pid_f, LOCK_EX | LOCK_NB ) or return 0;
     close $pid_f ;
+   
     return 1;
+}
+
+sub _write_pid {
+    
+    sysopen my $pid_f, PIDFILE, O_WRONLY | O_CREAT or die "Can't open pid file: $!"; 
+    
+    flock( $pid_f, LOCK_EX | LOCK_NB ) or CORE::exit(0); 
+    
+    {  my $ofh = select $pid_f ;
+       $/ = undef;
+       select $ofh;
+    }
+
+    my $c_pid = get_proc_pid();
+    {
+        use bytes;
+        syswrite($pid_f, $c_pid , length($c_pid), 0 );
+    }
+    
+    return $pid_f;
+}
+
+sub get_proc_pid {
+    my ($pid) = glob('/proc/self/task/*');
+    $pid =~ s/\/.*\///;
+    return $pid;
+}
+
+sub UNLOAD {
+    open my $pid_f, '<', PIDFILE or return;
+    my $pid = do { local $/ = undef; <$pid_f> };
+    close $pid_f;
+
+    unlink PIDFILE;
+
+    chomp $pid;
+    return unless ($pid =~ /^\d+$/);
+    kill 15, $pid ;
 }
 
 Irssi::signal_add_last("message private", "priv_msg");
