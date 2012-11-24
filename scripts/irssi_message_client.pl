@@ -22,6 +22,7 @@ $VERSION = '0.0.1';
 
 sub PIDFILE    { sprintf('%s/.irssi/scripts/sq.pid', $ENV{HOME} );  }
 sub SQ_SOCKET  { sprintf('%s/.irssi/scripts/sq.socket', $ENV{HOME} ); }
+sub SQ_LOG     { sprintf('%s/.irssi/scripts/sq.log', $ENV{HOME} ); } 
 
 ensure_server(); 
 
@@ -77,7 +78,8 @@ sub ensure_server {
             SimpleQueue::Service->import();
 
             my $message_server = SimpleQueue::Server->new( 
-                socket_path => SQ_SOCKET 
+                socket_path => SQ_SOCKET, 
+                log_file    => SQ_LOG
             );
 
             $message_server->run(); 

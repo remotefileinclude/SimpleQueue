@@ -6,7 +6,7 @@ use warnings;
 use IO::Socket;
 use IO::Select;
 use Socket;
-use Log::Log4perl;
+use Log::Log4perl qw| :easy |;
 use Carp;
 use SimpleQueue::Common qw| sq_encode |;
 
@@ -28,6 +28,7 @@ sub new {
         port         => sub { ( $_[0] =~ /^\d+$/  ) or croak "port must be a number"  },
         timeout      => sub { ( $_[0] =~ /^\d+$/  ) or croak "timeout must be a number"  },
         socket_path  => sub { return 1 }, # TODO
+        log_file     => sub { return 1 }  # TODO
     );
 
     foreach my $set_arg ( keys %set_args ) {
@@ -91,6 +92,14 @@ sub _setup_client_socket {
 sub _run_main_loop {
     my ( $self ) = @_;
 
+    if ( $self->{log_file} ) {
+        Log::Log4perl->easy_init({ 
+            level   => $DEBUG,
+            file    => $self->{log_file}
+        });
+
+    }
+
     while (1) {
 
         my ($incoming) = 
@@ -115,6 +124,7 @@ sub _run_main_loop {
         # This loop deals with commands sent from the clients
         foreach my $subscriber ( @{$outgoing_r} ) {   
             if ( $subscriber == $self->{client_socket} )  {
+                  INFO("Got new client: "  . $subscriber->peerhost  );
                   my $active = $self->{client_socket}->accept();  
                   $self->{client_select}->add($active);    
             }
@@ -123,6 +133,7 @@ sub _run_main_loop {
                 sysread($subscriber, my $inline, 4064);
 
 	            if ( !$inline ) {
+                     INFO("Lost client: " . $subscriber->peerhost );
                      $self->{client_select}->remove($subscriber);
                      delete $self->{client_tracking}->{"$subscriber"};
                 }
@@ -131,6 +142,7 @@ sub _run_main_loop {
 	    	         print $subscriber "pong";
                 }
                 elsif ( $inline eq "quit" ) {
+                     INFO("Client Quit: " . $subscriber->peerhost ); 
                      $self->{client_select}->remove($subscriber); 
                      delete $self->{client_tracking}->{"$subscriber"};
                 }
@@ -143,22 +155,24 @@ sub _run_main_loop {
 
         # This loop deals with sending messages to the client
         foreach my $subscriber ( @{$outgoing_w} ) {   
-             if ( @messages ) {
-                 foreach my $message ( @messages ) {
+            if ( @messages ) {
+                foreach my $message ( @messages ) {
+            
+                    DEBUG("Got message: $message");
+                    my $packed_message = sq_encode($message);
 
-                     my $packed_message = sq_encode($message);
+                    print $subscriber $packed_message;
+                }
+            }
 
-                     print $subscriber $packed_message;
-                 }
-             }
-
-             if ( $self->_client_timeout($subscriber ) ){
-                 $self->{client_select}->remove($subscriber); 
-                 delete $self->{client_tracking}->{"$subscriber"};
-             }  
-             elsif ( ! $self->{client_tracking}->{"$subscriber"} ) {
-                 $self->{client_tracking}->{"$subscriber"}->{last_ping} = time ;	
-             }
+            if ( $self->_client_timeout($subscriber ) ){
+                INFO("Client timeout: " . $subscriber->peerhost ); 
+                $self->{client_select}->remove($subscriber); 
+                delete $self->{client_tracking}->{"$subscriber"};
+            }  
+            elsif ( ! $self->{client_tracking}->{"$subscriber"} ) {
+                $self->{client_tracking}->{"$subscriber"}->{last_ping} = time ;	
+            }
  
         }      
 
