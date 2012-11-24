@@ -8,6 +8,7 @@ use IO::Select;
 use Socket;
 use Log::Log4perl;
 use Carp;
+use SimpleQueue::Common qw| sq_encode |;
 
 sub new {
     my ( $class, %args ) = @_;
@@ -144,19 +145,8 @@ sub _run_main_loop {
         foreach my $subscriber ( @{$outgoing_w} ) {   
              if ( @messages ) {
                  foreach my $message ( @messages ) {
-                     # Message encoding  :
-                     #
-                     # - First 32 bits contains an unsigned integer specifying 
-                     #   the message body length in bytes
-                     # - Remainder contains the message body
-                     #
-                     # Clients must read the first 32 bit interger and then read that
-                     # interger number bytes to get the message body
-                     # How terribly with this break outside of ascii encoding?
-                     use bytes;
-                     my $byte_size      = length($message);
-	                 my $packformat     = sprintf("Na%s", $byte_size);
-                     my $packed_message = pack( $packformat, $byte_size, $message );
+
+                     my $packed_message = sq_encode($message);
 
                      print $subscriber $packed_message;
                  }

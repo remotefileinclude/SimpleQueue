@@ -8,6 +8,7 @@ use IO::Select;
 use Socket;
 use Log::Log4perl;
 use Carp;
+use SimpleQueue::Common qw|sq_decode|;
 
 our $PING_INT = 10;
 
@@ -41,7 +42,6 @@ sub new {
     $args{since_ping}  = {};
 
     return bless \%args, $class;
-
 }
 
 sub run {
@@ -75,20 +75,15 @@ sub _run_main_loop {
 
         foreach my $server ( @{$incoming} ) {
 	        print "Got message\n";
+            
+            my $message = sq_decode($server) ; 
 
-            # First 32 bits are an unsigned int that contain 
-            # the message body length in bytes
-            sysread( $server, my $bytes, 4);
-            my ($length) = unpack("N", $bytes );
-               
-	        if (!$length) {
+            if (!$message) {
                 print "Lost server\n";
                 $self->{select_loop}->remove($server);
                 exit;
-            }
- 
-            sysread($server, my $p_message, int($length) );
-            my ($message) = unpack( sprintf('a%i',$length), $p_message);
+            } 
+
             $self->{callback}->($message) ;
         }  
  
