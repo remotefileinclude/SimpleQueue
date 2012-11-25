@@ -115,3 +115,20 @@ sub _run_main_loop {
 }
 
 1;
+
+
+__END__
+
+=pod
+
+=head1 NAME
+
+SimpleQueue::Client
+
+=head1 METHODS
+
+=head2 new
+
+=head2 run
+
+=cut
